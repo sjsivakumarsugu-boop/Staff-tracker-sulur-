@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff Tracker - Coimbatore - Sulur</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mu:#6b7280;--bd:#e3e6ee;--ac:#4f46e5;--ok:#16a34a;--bad:#dc2626;--wn:#d97706}
+@media(prefers-color-scheme:dark){:root{--bg:#10131a;--card:#1a1f2b;--tx:#eef0f6;--mu:#98a0b3;--bd:#2b3243;--ac:#818cf8}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#app{max-width:1000px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 10px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.sp{justify-content:space-between}
+input,button{font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}input{min-width:0}
+button{cursor:pointer;background:var(--ac);color:#fff;border:0;font-weight:600}button.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}button.d{background:var(--bad)}
+.tabs button{background:transparent;color:var(--mu);border:1px solid var(--bd)}.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px}.stat b{display:block;font-size:24px}.stat span{color:var(--mu);font-size:13px}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{padding:8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}th{color:var(--mu);font-size:12px;text-transform:uppercase}
+td input{width:70px;padding:6px 8px}
+.bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--ac)}.bar.ok i{background:var(--ok)}
+.pill{padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;color:#fff}
+.mu{color:var(--mu)}.c{text-align:center}
+.slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:12px 0}
+.slots label{font-size:12px;color:var(--mu);display:block;margin-bottom:4px}.slots input{width:100%}
+#wrap{position:relative;width:min(320px,100%);margin:10px auto}canvas{width:100%;height:auto;display:block}
+.ptr{position:absolute;top:-6px;left:50%;transform:translateX(-50%);font-size:30px;color:var(--bad);line-height:1}
+.prize{font-size:20px;font-weight:700;text-align:center;margin:10px 0;color:var(--ok)}
+.login{max-width:360px;margin:10vh auto}.login input{width:100%;margin:6px 0}
+.err{color:var(--bad);font-size:13px;min-height:18px}
+.link{background:none;color:var(--ac);padding:4px;font-weight:500;border:0}
+</style></head><body><div id="app"><p class="mu c">Loading…</p></div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,signInAnonymously,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,doc,setDoc,deleteDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ====== PASTE YOUR FIREBASE CONFIG HERE (see setup steps) ====== */
+const firebaseConfig={apiKey:"AIzaSyCCXg7Op1dM1NPiVtzgOL3n-b4aOItu9-o",authDomain:"staff-tracker-sulur.firebaseapp.com",projectId:"staff-tracker-sulur",storageBucket:"staff-tracker-sulur.firebasestorage.app",messagingSenderId:"746993258228",appId:"1:746993258228:web:578d4e78d4262b35cf98a1"};
+/* =============================================================== */
+
+const SL=["2pm","4pm","6pm","8pm","Closing"];
+const COL=["#6366f1","#f59e0b","#10b981","#ef4444","#0ea5e9","#a855f7","#f97316","#14b8a6"];
+const S={staff:{},logs:{},cfg:{items:["Bonus ₹100","Gift voucher","Extra 30 min break","Chocolate box","Movie ticket","Better luck next time"],targets:{}}};
+let me=JSON.parse(localStorage.getItem("me")||"null"),tab="dash",date=today(),pending=false,spinning=false,err="",mgrForm=false,ready=false;
+function today(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cid=s=>String(s).trim().toUpperCase().replace(/[^A-Z0-9_-]/g,"");
+const $=s=>document.querySelector(s);
+const hash=async(c,p)=>[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode("stt:"+c+":"+p)))].map(b=>b.toString(16).padStart(2,"0")).join("");
+
+if(firebaseConfig.apiKey==="PASTE"){document.getElementById("app").innerHTML='<div class="card login"><h1>Setup needed</h1><p>Paste your Firebase config into index.html (see the setup steps).</p></div>';throw new Error("no config")}
+const app=initializeApp(firebaseConfig),auth=getAuth(app),fdb=getFirestore(app);
+let subs=false;
+onAuthStateChanged(auth,u=>{
+  if(!u){signInAnonymously(auth).catch(e=>{err=e.message;render(true)});return}
+  if(subs)return;subs=true;
+  onSnapshot(collection(fdb,"staff"),q=>{S.staff={};q.forEach(d=>S.staff[d.id]=d.data());ready=true;render()});
+  onSnapshot(collection(fdb,"logs"),q=>{S.logs={};q.forEach(d=>S.logs[d.id]=d.data());render()});
+  onSnapshot(doc(fdb,"config","main"),s=>{if(s.exists())S.cfg={...S.cfg,...s.data()};render()});
+});
+const isMgr=()=>!!auth.currentUser?.email;
+function put(col,id,v){S[col][id]=v;setDoc(doc(fdb,col,id),v).catch(e=>{alert("Save failed: "+e.message)});render(true)}
+function del(col,id){delete S[col][id];deleteDoc(doc(fdb,col,id)).catch(e=>alert(e.message));render(true)}
+function putCfg(){setDoc(doc(fdb,"config","main"),S.cfg).catch(e=>alert("Save failed: "+e.message));render(true)}
+
+const lk=(d,c)=>d+"_"+c;
+const targetOf=(c,d)=>Number(S.cfg.targets?.[d]??S.staff[c]?.target??0);
+function achieved(l){let v=0;SL.forEach(s=>{const x=l?.slots?.[s];if(x!==undefined&&x!==""&&x!==null)v=Number(x)});return v}
+function setSlot(c,d,s,val){const k=lk(d,c),l=S.logs[k]||{date:d,code:c,slots:{}};if(l.spun&&!isMgr()){alert("Already spun today — entries are locked.");return render(true)}l.slots={...l.slots,[s]:val===""?"":Number(val)};put("logs",k,l)}
+
+function render(force){
+  if(!force&&document.activeElement?.tagName==="INPUT"){pending=true;return}
+  pending=false;if(spinning)return;
+  if(!ready&&!force)return;
+  if(me&&me.role==="s"&&ready&&!S.staff[me.code]){me=null;localStorage.removeItem("me")}
+  if(me?.role==="m"&&!isMgr()&&auth.currentUser){me=null;localStorage.removeItem("me")}
+  $("#app").innerHTML=!me?loginV():me.role==="m"?mgrV():staffV();
+  if(me?.role==="s")drawWheel(0);
+}
+document.addEventListener("focusout",()=>setTimeout(()=>{if(pending&&document.activeElement?.tagName!=="INPUT")render()},50));
+
+function loginV(){return mgrForm?`<div class="card login"><h1>Manager login</h1><div class="mu" style="margin-bottom:8px">Staff Tracker · Coimbatore - Sulur</div><input id="me" type="email" placeholder="Manager email"><input id="mp" type="password" placeholder="Password"><div class="err">${esc(err)}</div>
+<button style="width:100%" onclick="mgrLogin()">Login</button><button class="link" onclick="mgrForm=false;err='';render(true)">← Staff login</button></div>`
+:`<div class="card login"><h1>Staff Tracker</h1><div class="mu" style="margin-bottom:8px">Store: Coimbatore - Sulur</div><p class="mu">Login with your employee code and PIN</p>
+<input id="lc" placeholder="Employee code" autocapitalize="characters"><input id="lp" type="password" inputmode="numeric" placeholder="PIN">
+<div class="err">${esc(err)}</div><button style="width:100%" onclick="login()">Login</button><button class="link" onclick="mgrForm=true;err='';render(true)">Manager login</button></div>`}
+async function login(){const c=cid($("#lc").value),p=$("#lp").value;err="";const s=S.staff[c];
+  if(!s)err="Employee code not found";else if(s.pin!==await hash(c,p))err="Wrong PIN";
+  else{me={role:"s",code:c};localStorage.setItem("me",JSON.stringify(me))}render(true)}
+async function mgrLogin(){err="";try{await signInWithEmailAndPassword(auth,$("#me").value.trim(),$("#mp").value);me={role:"m"};localStorage.setItem("me",JSON.stringify(me))}catch(e){err="Wrong email or password"}render(true)}
+async function logout(){const m=isMgr();me=null;localStorage.removeItem("me");mgrForm=false;if(m){subs=false;await signOut(auth)}render(true)}
+const head=t=>`<div class="mu" style="font-size:12px;font-weight:700;letter-spacing:.5px;margin-bottom:4px">STAFF TRACKER · COIMBATORE - SULUR</div><div class="row sp" style="margin-bottom:14px"><h1>${t}</h1><button class="g" onclick="logout()">Logout</button></div>`;
+
+function staffV(){
+  const c=me.code,st=S.staff[c];if(!st)return "";const d=today(),l=S.logs[lk(d,c)]||{slots:{}},t=targetOf(c,d),v=achieved(l),pct=t?Math.min(100,Math.round(v/t*100)):0,ok=t>0&&v>=t;
+  return head("Hi, "+esc(st.name))+`<div class="card"><div class="row sp"><div><div class="mu">Today's target</div><b style="font-size:28px">${t}</b></div><div><div class="mu">Achieved</div><b style="font-size:28px">${v}</b></div><div><div class="mu">Progress</div><b style="font-size:28px">${pct}%</b></div></div>
+<div class="bar ${ok?"ok":""}" style="margin-top:12px"><i style="width:${pct}%"></i></div>
+<h2 style="margin-top:16px">Update achieved count (running total)</h2>
+<div class="slots">${SL.map(s=>`<div><label>${s}</label><input type="number" min="0" inputmode="numeric" value="${l.slots?.[s]??""}" ${l.spun?"disabled":""} onchange="setSlot('${c}','${d}','${s}',this.value)"></div>`).join("")}</div></div>
+<div class="card c"><h2>Spin the wheel</h2>${ok?(l.spun?`<p class="mu">You already spun today 🎉</p><div class="prize">🎁 ${esc(l.prize)}</div>`:`<p class="mu">Target achieved! Spin to win a reward.</p><div id="wrap"><div class="ptr">▼</div><canvas id="cv" width="640" height="640"></canvas></div><div class="prize" id="pz"></div><button id="sb" onclick="spin()">SPIN</button>`):`<p class="mu">Achieve today's target to unlock the spin wheel. ${t-v>0?`${t-v} more to go!`:""}</p>`}</div>`}
+function drawWheel(rot){
+  const cv=$("#cv");if(!cv)return;const x=cv.getContext("2d"),it=S.cfg.items,n=it.length||1,a=2*Math.PI/n,R=320;
+  x.clearRect(0,0,640,640);x.save();x.translate(R,R);
+  it.forEach((t,i)=>{const s=rot+i*a-Math.PI/2;x.beginPath();x.moveTo(0,0);x.arc(0,0,R-4,s,s+a);x.fillStyle=COL[i%COL.length];x.fill();x.strokeStyle="#fff";x.lineWidth=3;x.stroke();
+    x.save();x.rotate(s+a/2);x.fillStyle="#fff";x.font="bold 26px system-ui";x.textAlign="right";x.fillText(t.length>16?t.slice(0,15)+"…":t,R-24,9);x.restore()});
+  x.restore()}
+function spin(){
+  const c=me.code,d=today(),k=lk(d,c),l=S.logs[k],it=S.cfg.items;if(spinning||!l||l.spun||it.length<1)return;
+  const i=Math.floor(Math.random()*it.length),a=2*Math.PI/it.length;spinning=true;$("#sb").disabled=true;
+  S.logs[k]={...l,spun:true,prize:it[i],spunAt:new Date().toISOString()};setDoc(doc(fdb,"logs",k),S.logs[k]).catch(e=>alert(e.message));
+  const fin=2*Math.PI*6+((2*Math.PI-(i+.5)*a)%(2*Math.PI)),t0=performance.now();
+  (function f(now){const p=Math.min(1,(now-t0)/5000),e=1-Math.pow(1-p,3);drawWheel(fin*e);
+    if(p<1)requestAnimationFrame(f);else{spinning=false;$("#pz").textContent="🎉 You won: "+it[i]+"!";$("#sb").style.display="none"}})(t0)}
+
+function mgrV(){const tb=[["dash","Dashboard"],["staff","Staff"],["wheel","Spin wheel items"]];
+  return head("Manager")+`<div class="row tabs" style="margin-bottom:14px">${tb.map(([k,n])=>`<button class="${tab===k?"on":""}" onclick="setTab('${k}')">${n}</button>`).join("")}</div>`+(tab==="dash"?dashV():tab==="staff"?staffMV():wheelV())}
+function dashV(){
+  const cs=Object.keys(S.staff).sort(),rows=cs.map(c=>{const l=S.logs[lk(date,c)]||{slots:{}},t=targetOf(c,date),v=achieved(l),p=t?Math.round(v/t*100):0;return{c,l,t,v,p,ok:t>0&&v>=t}});
+  const done=rows.filter(r=>r.ok).length,avg=rows.length?Math.round(rows.reduce((s,r)=>s+Math.min(r.p,100),0)/rows.length):0,top=[...rows].sort((a,b)=>b.p-a.p)[0];
+  return `<div class="card row"><label>Date <input type="date" value="${date}" onchange="setDate(this.value)"></label><label>Target for everyone on this date <input id="tg" type="number" min="0" style="width:90px" value="${S.cfg.targets?.[date]??""}"></label>
+<button onclick="setT()">Set</button><button class="g" onclick="clrT()">Use staff default</button></div>
+<div class="stats"><div class="stat"><b>${rows.length}</b><span>Staff</span></div><div class="stat"><b>${done}</b><span>Target achieved</span></div><div class="stat"><b>${avg}%</b><span>Avg achievement</span></div><div class="stat"><b>${top&&top.p?esc(S.staff[top.c].name):"-"}</b><span>Top performer</span></div></div>
+<div class="card tw"><h2>Bi-hourly tracker (running totals — editable)</h2><table><tr><th>Staff</th><th>Target</th>${SL.map(s=>`<th>${s}</th>`).join("")}<th>Progress</th><th>Status</th><th>Spin prize</th></tr>
+${rows.map(r=>`<tr><td><b>${esc(S.staff[r.c].name)}</b><div class="mu" style="font-size:12px">${esc(r.c)}</div></td><td>${r.t}</td>${SL.map(s=>`<td><input type="number" min="0" value="${r.l.slots?.[s]??""}" onchange="setSlot('${r.c}','${date}','${s}',this.value)"></td>`).join("")}
+<td><div class="bar ${r.ok?"ok":""}"><i style="width:${Math.min(100,r.p)}%"></i></div><span class="mu" style="font-size:12px">${r.p}%</span></td>
+<td><span class="pill" style="background:var(--${r.ok?"ok":r.v?"wn":"mu"})">${r.ok?"Achieved":r.v?"In progress":"Not started"}</span></td><td>${r.l.spun?"🎁 "+esc(r.l.prize):r.ok?'<span class="mu">Not spun yet</span>':"-"}</td></tr>`).join("")||`<tr><td colspan="10" class="mu">No staff yet. Add staff in the Staff tab.</td></tr>`}</table></div>`}
+function staffMV(){
+  return `<div class="card"><h2>Add / update staff</h2><div class="row"><input id="sc" placeholder="Employee code"><input id="sn" placeholder="Name"><input id="st" type="number" min="0" placeholder="Daily target" style="width:120px"><input id="sp" placeholder="PIN (4+ digits)" style="width:130px"><button onclick="addS()">Save</button></div>
+<div class="err">${esc(err)}</div><p class="mu" style="font-size:13px">To reset a PIN, save the same code again with a new PIN. Leave PIN blank to keep the old one.</p></div>
+<div class="card tw"><h2>Staff list</h2><table><tr><th>Code</th><th>Name</th><th>Default daily target</th><th></th></tr>
+${Object.keys(S.staff).sort().map(c=>`<tr><td>${esc(c)}</td><td>${esc(S.staff[c].name)}</td><td><input type="number" min="0" value="${S.staff[c].target}" onchange="updT('${c}',this.value)"></td><td><button class="d" onclick="delS('${c}')">Remove</button></td></tr>`).join("")||`<tr><td colspan="4" class="mu">No staff added.</td></tr>`}</table></div>`}
+function wheelV(){
+  return `<div class="card"><h2>Spin wheel items (set by manager)</h2>
+${S.cfg.items.map((t,i)=>`<div class="row" style="margin-bottom:8px"><span style="width:14px;height:14px;border-radius:4px;background:${COL[i%COL.length]}"></span><input value="${esc(t)}" style="flex:1" onchange="updI(${i},this.value)"><button class="d" onclick="delI(${i})">✕</button></div>`).join("")}
+<div class="row"><input id="ni" placeholder="New reward" style="flex:1"><button onclick="addI()">Add item</button></div><p class="mu" style="font-size:13px">Use at least 2 items. Each staff member can spin once per day after reaching the target.</p></div>`}
+
+const fn={render,login,mgrLogin,logout,setSlot,spin,
+ setTab:k=>{tab=k;render(true)},setDate:v=>{date=v;render(true)},
+ setT:()=>{const v=$("#tg").value;if(v==="")return;S.cfg.targets={...S.cfg.targets,[date]:Number(v)};putCfg()},
+ clrT:()=>{const t={...S.cfg.targets};delete t[date];S.cfg.targets=t;putCfg()},
+ async addS(){const c=cid($("#sc").value),n=$("#sn").value.trim(),t=Number($("#st").value)||0,p=$("#sp").value.trim();err="";const old=S.staff[c];
+  if(!c||!n)err="Enter code and name";else if(!old&&p.length<4)err="Set a PIN of at least 4 characters";else if(p&&p.length<4)err="PIN must be 4+ characters";
+  if(err)return render(true);put("staff",c,{name:n,code:c,target:t,pin:p?await hash(c,p):old.pin})},
+ updT:(c,v)=>{S.staff[c].target=Number(v)||0;put("staff",c,S.staff[c])},
+ delS:c=>{if(confirm("Remove "+S.staff[c].name+"?"))del("staff",c)},
+ updI:(i,v)=>{S.cfg.items[i]=v;putCfg()},delI:i=>{S.cfg.items.splice(i,1);putCfg()},
+ addI:()=>{const v=$("#ni").value.trim();if(v){S.cfg.items.push(v);putCfg()}}};
+Object.assign(window,fn);
+Object.defineProperty(window,"mgrForm",{get:()=>mgrForm,set:v=>{mgrForm=v}});
+Object.defineProperty(window,"err",{get:()=>err,set:v=>{err=v}});
+</script></body></html>
