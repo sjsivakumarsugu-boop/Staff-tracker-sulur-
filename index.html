@@ -98,7 +98,7 @@ function staffV(){
 <div class="bar ${ok?"ok":""}" style="margin-top:12px"><i style="width:${pct}%"></i></div>
 <h2 style="margin-top:16px">Update achieved count (running total)</h2>
 <div class="slots">${SL.map(s=>`<div><label>${s}</label><input type="number" min="0" inputmode="numeric" value="${l.slots?.[s]??""}" ${l.spun?"disabled":""} onchange="setSlot('${c}','${d}','${s}',this.value)"></div>`).join("")}</div></div>
-<div class="card c"><h2>Spin the wheel</h2>${ok?(l.spun?`<p class="mu">You already spun today 🎉</p><div class="prize">🎁 ${esc(l.prize)}</div>`:`<p class="mu">Target achieved! Spin to win a reward.</p><div id="wrap"><div class="ptr">▼</div><canvas id="cv" width="640" height="640"></canvas></div><div class="prize" id="pz"></div><button id="sb" onclick="spin()">SPIN</button>`):`<p class="mu">Achieve today's target to unlock the spin wheel. ${t-v>0?`${t-v} more to go!`:""}</p>`}</div>`}
+${topV(d,"Today's top 3 performers")}<div class="card c"><h2>Spin the wheel</h2>${ok?(l.spun?`<p class="mu">You already spun today 🎉</p><div class="prize">🎁 ${esc(l.prize)}</div>`:`<p class="mu">Target achieved! Spin to win a reward.</p><div id="wrap"><div class="ptr">▼</div><canvas id="cv" width="640" height="640"></canvas></div><div class="prize" id="pz"></div><button id="sb" onclick="spin()">SPIN</button>`):`<p class="mu">Achieve today's target to unlock the spin wheel. ${t-v>0?`${t-v} more to go!`:""}</p>`}</div>`}
 function drawWheel(rot){
   const cv=$("#cv");if(!cv)return;const x=cv.getContext("2d"),it=S.cfg.items,n=it.length||1,a=2*Math.PI/n,R=320;
   x.clearRect(0,0,640,640);x.save();x.translate(R,R);
@@ -115,12 +115,14 @@ function spin(){
 
 function mgrV(){const tb=[["dash","Dashboard"],["staff","Staff"],["wheel","Spin wheel items"]];
   return head("Manager")+`<div class="row tabs" style="margin-bottom:14px">${tb.map(([k,n])=>`<button class="${tab===k?"on":""}" onclick="setTab('${k}')">${n}</button>`).join("")}</div>`+(tab==="dash"?dashV():tab==="staff"?staffMV():wheelV())}
+function ranked(d){return Object.keys(S.staff).map(c=>{const l=S.logs[lk(d,c)]||{slots:{}},t=targetOf(c,d),v=achieved(l);return{c,t,v,p:t?Math.round(v/t*100):0}}).filter(r=>r.v>0).sort((a,b)=>b.p-a.p||b.v-a.v).slice(0,3)}
+function topV(d,title){const r=ranked(d),m=["🥇","🥈","🥉"];return `<div class="card"><h2>🏆 ${title}</h2>${r.length?`<div class="stats" style="margin:0">${r.map((x,i)=>`<div class="stat"><span style="font-size:30px">${m[i]}</span><b style="font-size:18px">${esc(S.staff[x.c].name)}</b><span>${x.v} / ${x.t} · ${x.p}%</span></div>`).join("")}</div>`:`<p class="mu" style="margin:0">No entries yet today.</p>`}</div>`}
 function dashV(){
   const cs=Object.keys(S.staff).sort(),rows=cs.map(c=>{const l=S.logs[lk(date,c)]||{slots:{}},t=targetOf(c,date),v=achieved(l),p=t?Math.round(v/t*100):0;return{c,l,t,v,p,ok:t>0&&v>=t}});
   const done=rows.filter(r=>r.ok).length,avg=rows.length?Math.round(rows.reduce((s,r)=>s+Math.min(r.p,100),0)/rows.length):0,top=[...rows].sort((a,b)=>b.p-a.p)[0];
   return `<div class="card row"><label>Date <input type="date" value="${date}" onchange="setDate(this.value)"></label><label>Target for everyone on this date <input id="tg" type="number" min="0" style="width:90px" value="${S.cfg.targets?.[date]??""}"></label>
 <button onclick="setT()">Set</button><button class="g" onclick="clrT()">Use staff default</button></div>
-<div class="stats"><div class="stat"><b>${rows.length}</b><span>Staff</span></div><div class="stat"><b>${done}</b><span>Target achieved</span></div><div class="stat"><b>${avg}%</b><span>Avg achievement</span></div><div class="stat"><b>${top&&top.p?esc(S.staff[top.c].name):"-"}</b><span>Top performer</span></div></div>
+${topV(date,"Top 3 performers of the day")}<div class="stats"><div class="stat"><b>${rows.length}</b><span>Staff</span></div><div class="stat"><b>${done}</b><span>Target achieved</span></div><div class="stat"><b>${avg}%</b><span>Avg achievement</span></div><div class="stat"><b>${top&&top.p?esc(S.staff[top.c].name):"-"}</b><span>Top performer</span></div></div>
 <div class="card tw"><h2>Bi-hourly tracker (running totals — editable)</h2><table><tr><th>Staff</th><th>Target</th>${SL.map(s=>`<th>${s}</th>`).join("")}<th>Progress</th><th>Status</th><th>Spin prize</th></tr>
 ${rows.map(r=>`<tr><td><b>${esc(S.staff[r.c].name)}</b><div class="mu" style="font-size:12px">${esc(r.c)}</div></td><td>${r.t}</td>${SL.map(s=>`<td><input type="number" min="0" value="${r.l.slots?.[s]??""}" onchange="setSlot('${r.c}','${date}','${s}',this.value)"></td>`).join("")}
 <td><div class="bar ${r.ok?"ok":""}"><i style="width:${Math.min(100,r.p)}%"></i></div><span class="mu" style="font-size:12px">${r.p}%</span></td>
